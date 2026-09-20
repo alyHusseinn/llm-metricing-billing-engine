@@ -10,7 +10,7 @@ import {
 import { sql } from 'drizzle-orm'
 
 export const planNameEnum = pgEnum("plan_name", ["Free", "Pro"]);
-export const subStatusEnum = pgEnum("sub_status", ["Active", "Past_due", "Canceled"]);
+export const subStatusEnum = pgEnum("sub_status", ["Active", "Past_due", "Limit_Exceeded", "Canceled"]);
 export const reqStatusEnum = pgEnum("request_status", ["Succeeded", "Failed"]);
 
 

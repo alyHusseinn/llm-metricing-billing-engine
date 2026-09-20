@@ -3,6 +3,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
 import authRouter from "./routes/auth";
+import llmRouter from "./routes/llm"
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
@@ -17,6 +18,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/auth", authRouter);
+app.use("/llm", llmRouter)
 
 app.listen(PORT, () => {
   console.log(`Listening at port ${PORT}`);

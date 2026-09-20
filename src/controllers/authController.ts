@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
-import { usersTable } from "../db/schema";
+import { planTable, subscriptionTable, usersTable } from "../db/schema";
 
 
 const signupSchema = z.object({
@@ -59,9 +59,13 @@ export async function signup(req: Request, res: Response): Promise<void> {
     .values({ name, email, passwordHash })
     .returning({ id: usersTable.id, name: usersTable.name, email: usersTable.email });
 
+  // create free subscription when singup available for 30 days
+  const [freePlan] = await db.select().from(planTable).where(eq(planTable.name, "Free"))
+  await db.insert(subscriptionTable).values({userId: user.id, status: "Active", planId: freePlan.id})
+
   const token = signToken(user.id);
 
-  res.status(201).json({ token, user: {name: user.name, email: user.email} });
+  res.status(201).json({ token, subscriptionTyep: "Free, 100k tokens available", user: {name: user.name, email: user.email} });
 }
 
 /**
