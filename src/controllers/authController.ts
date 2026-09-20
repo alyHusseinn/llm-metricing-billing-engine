@@ -52,11 +52,11 @@ export async function signup(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
   const [user] = await db
     .insert(usersTable)
-    .values({ name, email, password_hash })
+    .values({ name, email, passwordHash })
     .returning({ id: usersTable.id, name: usersTable.name, email: usersTable.email });
 
   const token = signToken(user.id);
@@ -88,7 +88,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const passwordMatch = await bcrypt.compare(password, user.password_hash);
+  const passwordMatch = await bcrypt.compare(password, user.passwordHash);
   if (!passwordMatch) {
     res.status(401).json({ error: "Invalid email or password" });
     return;
