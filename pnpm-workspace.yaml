@@ -1,0 +1,4 @@
+ignoredBuiltDependencies:
+  - bcrypt
+  - esbuild
+  - node-base64
