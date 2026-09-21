@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { planTable, subscriptionTable, usersTable } from "../db/schema";
+import { env } from "../utils/env";
 
 
 const signupSchema = z.object({
@@ -22,8 +23,8 @@ const loginSchema = z.object({
 const SALT_ROUNDS = 12;
 
 function signToken(userId: number): string {
-  const secret = process.env.JWT_SECRET!;
-  const expiresIn = (process.env.JWT_EXPIRES_IN ?? "7d") as jwt.SignOptions["expiresIn"];
+  const secret = env.JWT_SECRET!;
+  const expiresIn = (env.JWT_EXPIRES_IN ?? "7d") as jwt.SignOptions["expiresIn"];
   return jwt.sign({ userId }, secret, { expiresIn });
 }
 
