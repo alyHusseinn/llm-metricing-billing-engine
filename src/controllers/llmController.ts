@@ -2,7 +2,7 @@ import { Response } from "express";
 import { AuthRequest } from "../middleware/authenticate";
 import { planTable, subscriptionTable, usageEventTable } from "../db/schema";
 import { db } from "../db";
-import { eq, and, sum } from "drizzle-orm";
+import { eq, and, sum, count } from "drizzle-orm";
 
 
 
@@ -89,9 +89,9 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
-        // 5. Check Token Quota for the CURRENT billing cycle
+        // Check Quota for the CURRENT cycle
         const [usageResult] = await db
-            .select({ totalUsed: sum(usageEventTable.totalTokens) })
+            .select({ totalTokensUsed: sum(usageEventTable.totalTokens), totalRequests: count() })
             .from(usageEventTable)
             .where(
                 and(
@@ -99,7 +99,8 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
                 )
             );
 
-        const tokensUsed = Number(usageResult?.totalUsed ?? 0);
+        const tokensUsed = Number(usageResult?.totalTokensUsed ?? 0);
+        const requestsUsed = Number(usageResult?.totalRequests ?? 0)
         const ESTIMATED_CALL_TOKENS = 5000; // Expected input + output tokens
 
         if (tokensUsed + ESTIMATED_CALL_TOKENS > plan.tokensLimit) {
@@ -116,6 +117,19 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
                 limit: plan.tokensLimit,
             });
             return;
+        } else if (requestsUsed >= plan.requestsLimit) {
+            await db
+                .update(subscriptionTable)
+                .set({ status: "Limit_Exceeded" })
+                .where(eq(subscriptionTable.id, subscription.id));
+            
+            res.status(429).json({
+                error: "Requests quota exceeds for the current billing period",
+                code: "QOUTA_EXCEEDED",
+                currentUsage: requestsUsed,
+                limit: plan.requestsLimit
+            })
+            return
         }
 
         // Simulated Call to LLM
