@@ -6,6 +6,7 @@ import {
   timestamp,
   pgEnum,
   index,
+  unique,
 } from "drizzle-orm/pg-core";
 import { sql } from 'drizzle-orm'
 
@@ -74,7 +75,7 @@ export const usageEventTable = pgTable("usage_events", {
     .references(() => subscriptionTable.id, { onDelete: "restrict" }),
 
   // idempotency key uuid4.
-  requestId: text("request_id").notNull().unique(),
+  requestId: text("request_id").notNull(),
 
   inputTokens: integer("input_tokens").notNull(),
   outputTokens: integer("output_tokens").notNull(),
@@ -82,7 +83,9 @@ export const usageEventTable = pgTable("usage_events", {
     .generatedAlwaysAs(sql`input_tokens + output_tokens`),
 
   requestStatus: reqStatusEnum().notNull(),
-});
+}, (t) => [
+  unique("unique_on_requestId_and_subscription_id").on(t.requestId, t.subscriptionId)
+]);
 
 export const stripeEventTable = pgTable("stripe_event", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
