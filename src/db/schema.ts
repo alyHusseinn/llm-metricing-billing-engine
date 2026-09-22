@@ -45,6 +45,8 @@ export const subscriptionTable = pgTable("subscriptions", {
 
   updatedAt: timestamp("updated_at").notNull().defaultNow().$onUpdate(() => new Date()),
 
+  // createdAt: timestamp("created_at").notNull().defaultNow() 
+
   /**
    * NOTE: requestsUsed / tokensUsed counters are intentionally ABSENT.
    * Reason: usage_events is the append-only source of truth. Counters on the

@@ -5,6 +5,7 @@ import authRouter from "./routes/auth";
 import llmRouter from "./routes/llm";
 import subscripeRouter from "./routes/subscripe";
 import webhookRouter from "./routes/webhook";
+import usageRouter from "./routes/usage";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.get("/health", (_req, res) => {
 app.use("/auth", authRouter);
 app.use("/llm", llmRouter);
 app.use("/subscription", subscripeRouter);
+app.use("/usage", usageRouter)
 
 export default app;
 

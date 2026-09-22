@@ -2,7 +2,7 @@ import { Response } from "express";
 import { AuthRequest } from "../middleware/authenticate";
 import { planTable, subscriptionTable, usageEventTable } from "../db/schema";
 import { db } from "../db";
-import { eq, and, sum, gte } from "drizzle-orm";
+import { eq, and, sum } from "drizzle-orm";
 
 
 
