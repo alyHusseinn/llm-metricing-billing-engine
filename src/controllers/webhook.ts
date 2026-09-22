@@ -2,11 +2,11 @@ import { Request, Response } from "express";
 import Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { subscriptionTable } from "../db/schema";
+import { subscriptionTable, stripeEventTable } from "../db/schema";
 import { env } from "../utils/env";
 
-const stripeApiKey = env.STRIPE_SECRET_KEY || "";
-const stripeWebhookSecret = env.STRIPE_WEBHOOK_SECRET || "";
+const stripeApiKey = env.STRIPE_SECRET_KEY!;
+const stripeWebhookSecret = env.STRIPE_WEBHOOK_SECRET!;
 
 const stripeClient = new Stripe(stripeApiKey);
 
@@ -28,6 +28,21 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
 
     try {
         event = stripeClient.webhooks.constructEvent(req.body, sig, stripeWebhookSecret);
+
+        // check stripe_evnet in DB? don't process it : insert
+        const [insertedEvent] = await db.insert(stripeEventTable)
+        .values({type: event.type, stripeEventId: event.id})
+        .onConflictDoNothing({
+            target: stripeEventTable.stripeEventId
+        }).returning();
+
+        // The event processed before
+        if(!insertedEvent) {
+            console.log("This Event has been processed before")
+            res.status(200).json({ received: true });
+            return;
+        }
+
     } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         console.error(`Stripe Webhook Signature Verification Failed: ${message}`);
@@ -47,7 +62,7 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
                     const stripeSubscriptionId = session.subscription as string | null;
 
                     if (userId && planId) {
-                        console.log(`💳 Activating subscription for user ${userId}, plan ${planId}`);
+                        console.log(`Activating subscription for user ${userId}, plan ${planId}`);
 
                         // Insert the new active subscription
                         await db.insert(subscriptionTable).values({

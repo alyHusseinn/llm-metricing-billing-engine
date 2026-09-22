@@ -83,3 +83,17 @@ export const usageEventTable = pgTable("usage_events", {
 
   requestStatus: reqStatusEnum().notNull(),
 });
+
+export const stripeEventTable = pgTable("stripe_event", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+
+  stripeEventId: varchar("stripe_event_id", { length: 255 })
+    .notNull()
+    .unique(),
+
+  type: varchar("type", { length: 255 }).notNull(),
+
+  receivedAt: timestamp("received_at")
+    .defaultNow()
+    .notNull(),
+});
