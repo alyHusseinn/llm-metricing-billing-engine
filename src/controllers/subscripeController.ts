@@ -36,13 +36,8 @@ export const subscripe = async (req: AuthRequest, res: Response): Promise<void> 
         const { planName } = parsed.data;
 
         // user has active sub?
-        const [activeSubWithPlan] = await db
-            .select({
-                subscription: subscriptionTable,
-                plan: planTable,
-            })
-            .from(subscriptionTable)
-            .innerJoin(planTable, eq(subscriptionTable.planId, planTable.id))
+        const [activeSub] = await db
+            .select().from(subscriptionTable)
             .where(
                 and(
                     eq(subscriptionTable.userId, userId!),
@@ -51,9 +46,10 @@ export const subscripe = async (req: AuthRequest, res: Response): Promise<void> 
             )
             .limit(1);
 
-        if (activeSubWithPlan) {
-            const { subscription, plan } = activeSubWithPlan;
-            const cycleStart = new Date(subscription.startDate).getTime();
+
+        if (activeSub) {
+
+            const cycleStart = new Date(activeSub.startDate).getTime();
             const expirationDate = new Date(cycleStart + THIRTY_DAYS_MS);
             const isExpired = new Date() > expirationDate;
 
@@ -62,18 +58,18 @@ export const subscripe = async (req: AuthRequest, res: Response): Promise<void> 
                 await db
                     .update(subscriptionTable)
                     .set({ status: "Past_due" })
-                    .where(eq(subscriptionTable.id, subscription.id));
-            } else if (plan.name === planName) {
-                // User already has this paid plan active and not expired
+                    .where(eq(subscriptionTable.id, activeSub.id));
+            } else {
+                // User already has active plan and not expired
                 res.status(409).json({
-                    error: `You already have an active ${planName} subscription.`,
+                    error: `You already have an active subscription.`,
                     code: "ACTIVE_SUBSCRIPTION_EXISTS",
-                    subscriptionId: subscription.id,
+                    subscriptionId: activeSub.id,
                     expiresAt: expirationDate.toISOString(),
                 });
                 return;
             }
-            // If user has active Free plan and wants Pro -> allow upgrade!
+
         }
 
         const [targetPlan] = await db.select().from(planTable).where(eq(planTable.name, planName));
