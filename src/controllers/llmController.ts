@@ -4,8 +4,6 @@ import { planTable, subscriptionTable, usageEventTable } from "../db/schema";
 import { db } from "../db";
 import { eq, and, sum, count } from "drizzle-orm";
 
-
-
 export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.userId;
@@ -84,7 +82,11 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
             res.status(200).json({
                 answer: "AI answer (cached)",
                 cached: true,
-                tokensUsed: existingEvent.totalTokens,
+                usage: {
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    totalTokens: 0,
+                },
             });
             return;
         }
@@ -122,7 +124,7 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
                 .update(subscriptionTable)
                 .set({ status: "Limit_Exceeded" })
                 .where(eq(subscriptionTable.id, subscription.id));
-            
+
             res.status(429).json({
                 error: "Requests quota exceeds for the current billing period",
                 code: "QOUTA_EXCEEDED",
@@ -166,5 +168,5 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
 };
 
 export default {
-    llmGenerate,
+    llmGenerate,                           
 };
