@@ -1,7 +1,6 @@
 import { usageEventTable, subscriptionTable, planTable } from "../db/schema";
-import { env } from "../utils/env"
-import { db } from "../db"
-import { desc, eq, sum } from "drizzle-orm";
+import { db } from "../db";
+import { desc, eq, sum, and } from "drizzle-orm";
 import { AuthRequest } from "../middleware/authenticate";
 import { Response } from "express";
 
@@ -19,12 +18,18 @@ const rollupUsage = async (req: AuthRequest, res: Response) => {
     try {
         let [sub] = await db.select()
             .from(subscriptionTable)
-            .where(eq(subscriptionTable.status, "Active"));
+            .where(and(
+                eq(subscriptionTable.userId, req.userId!),
+                eq(subscriptionTable.status, "Active")
+            ));
+
+        console.log(req.userId)
 
         if (!sub) {
-            // find the last sub and Rollup the usage events
+            // find the last sub by the user and Rollup the usage events
             const [notActiveSub] = await db.select()
                 .from(subscriptionTable)
+                .where(eq(subscriptionTable.userId, req.userId!))
                 .orderBy(desc(subscriptionTable.updatedAt));
 
             sub = notActiveSub;
@@ -34,16 +39,17 @@ const rollupUsage = async (req: AuthRequest, res: Response) => {
             .from(planTable)
             .where(eq(planTable.id, sub.planId));
 
-        const limit = plan.tokensLimit;
-        const cost = plan.priceInCents;
-        const [used] = await db.select({ tokensUsed: sum(usageEventTable.totalTokens) })
+        const limit = plan.tokensLimit!;
+        let [used] = (await db.select({ tokensUsed: sum(usageEventTable.totalTokens) })
             .from(usageEventTable)
-            .where(eq(usageEventTable.subscriptionId, sub.id))
+            .where(eq(usageEventTable.subscriptionId, sub.id)))
+
+        const costInCents = (Number(used.tokensUsed) / limit) * plan.priceInCents
 
         res.status(200).json({
             limit,
             used: used.tokensUsed,
-            cost
+            costInCents
         })
         return;
 
