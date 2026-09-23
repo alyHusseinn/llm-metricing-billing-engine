@@ -1,0 +1,21 @@
+run: npm run dev
+seed: npm run db:seed
+test: npm test
+base_url: http://localhost:3000
+endpoints:
+  - method: GET
+    path: /health
+  - method: POST
+    path: /auth/signup
+  - method: POST
+    path: /auth/login
+  - method: POST
+    path: /llm/generate
+  - method: POST
+    path: /subscription/subscripe
+  - method: GET
+    path: /subscription/success
+  - method: GET
+    path: /usage
+  - method: POST
+    path: /webhook
