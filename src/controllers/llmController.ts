@@ -136,6 +136,7 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
 
         // Simulated Call to LLM
         const inputTokens = 1000, outputTokens = 2500, reasoningTokens = 1000, cachedTokens = 500;
+        const totalTokens = inputTokens + outputTokens + reasoningTokens + cachedTokens;
         const generatedAnswer = "AI answer";
 
         // Record Usage Event 
@@ -157,8 +158,8 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
                 outputTokens,
                 reasoningTokens,
                 cachedTokens,
-                totalTokens: inputTokens + outputTokens + reasoningTokens + cachedTokens,
-                remainingTokens: plan.tokensLimit - (tokensUsed + inputTokens + outputTokens),
+                totalTokens,
+                remainingTokens: plan.tokensLimit - (tokensUsed + totalTokens),
             },
         });
     } catch (error) {

@@ -79,10 +79,10 @@ export const usageEventTable = pgTable("usage_events", {
 
   inputTokens: integer("input_tokens").notNull(),
   outputTokens: integer("output_tokens").notNull(),
-  reasoningTokens: integer("reasoning_tokents").notNull(),
+  reasoningTokens: integer("reasoning_tokens").notNull(),
   cachedTokens: integer("cached_tokens").notNull(),
   totalTokens: integer("total_tokens").notNull()
-    .generatedAlwaysAs(sql`input_tokens + output_tokens + reasoning_tokents + cached_tokens`),
+    .generatedAlwaysAs(sql`input_tokens + output_tokens + reasoning_tokens + cached_tokens`),
 
   requestStatus: reqStatusEnum().notNull(),
 }, (t) => [

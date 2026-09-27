@@ -40,7 +40,13 @@ const rollupUsage = async (req: AuthRequest, res: Response) => {
             .where(eq(planTable.id, sub.planId));
 
         const limit = plan.tokensLimit!;
-        let [used] = (await db.select({ tokensUsed: sum(usageEventTable.totalTokens) })
+        let [used] = (await db.select({
+            tokensUsed: sum(usageEventTable.totalTokens),
+            outputTokens: sum(usageEventTable.outputTokens),
+            inputTokens: sum(usageEventTable.inputTokens),
+            reasoningTokens: sum(usageEventTable.reasoningTokens),
+            cachedTokens: sum(usageEventTable.cachedTokens)
+        })
             .from(usageEventTable)
             .where(eq(usageEventTable.subscriptionId, sub.id)))
 
@@ -48,7 +54,7 @@ const rollupUsage = async (req: AuthRequest, res: Response) => {
 
         res.status(200).json({
             limit,
-            used: used.tokensUsed,
+            used,
             costInCents
         })
         return;
