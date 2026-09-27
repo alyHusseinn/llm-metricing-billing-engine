@@ -18,12 +18,6 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
         return;
     }
 
-    if (!stripeWebhookSecret) {
-        console.error("STRIPE_WEBHOOK_SECRET is not configured in environment variables");
-        res.status(500).json({ error: "Webhook secret is not configured on the server" });
-        return;
-    }
-
     let event: Stripe.Event;
 
     try {

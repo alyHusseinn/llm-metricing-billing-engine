@@ -83,7 +83,7 @@ export const subscripe = async (req: AuthRequest, res: Response): Promise<void> 
             payment_method_types: ["card"],
             line_items: [
                 {
-                    price: "price_1UHEtYAyJ4GTziQDBOR2clLV",
+                    price: env.STRIPE_PRICEID,
                     quantity: 1,
                 },
             ],
