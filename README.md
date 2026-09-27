@@ -9,7 +9,7 @@ Answers three fundamental questions in usage-based SaaS:
 
 ---
 
-## 🏛️ System Architecture
+## System Architecture
 
 ```mermaid
 flowchart TD
@@ -60,7 +60,7 @@ flowchart TD
 ```
 
 
-## 🔄 Request Lifecycle & Idempotency Flow
+## Request Lifecycle & Idempotency Flow
 
 ```mermaid
 sequenceDiagram
@@ -97,37 +97,29 @@ sequenceDiagram
 --->
 
 
-## ✨ Key Features
+## Key Features
 
 ### 1. Robust Metering & Deduplication
-- **Append-Only Ledger**: Usage is recorded as immutable events in `usage_events`.
-- **Zero Double-Counting**: Every billable action requires an `Idempotency-Key`. Replays return cached results and perform zero database insertions.
-- **Concurrent Safe**: Database-level unique constraint on `(request_id, subscription_id)` prevents race conditions.
+- Track each usage event with tokens used
+- No double counting: Every billable action requries unique "idempotency-key", replays returns cached response.
 
 ### 2. Quota & State Enforcement
 - **Multi-Tier Limits**: Checks both `tokens_limit` and `requests_limit`.
-- **Accurate Status Codes**:
-  - `400 Bad Request`: Missing idempotency key or invalid payload.
-  - `401 Unauthorized`: Missing or invalid JWT token.
-  - `402 Payment Required`: No active subscription or subscription expired past 30 days.
-  - `429 Too Many Requests`: Token or request quota exceeded.
-- **Automatic State Transitions**: Transitions subscriptions to `Past_due` or `Limit_Exceeded` when thresholds are hit.
+- **Automatic State Transitions**: Automatically change the subscription state when it "Past_due", or "Limit_Exceeded"
 
 ### 3. End-to-End Stripe Integration
-- **Subscription Checkout**: Automatically creates Stripe Checkout Sessions in subscription mode with metadata linking to local tenant records.
-- **Signature Verification**: Verifies cryptographic signatures using raw buffer payloads before processing.
-- **Idempotent Webhooks**: De-duplicates retransmitted Stripe events using a `stripe_event` ledger.
-- **Lifecycle Sync**: Updates statuses on `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`.
+- Add Stripe as a main payment method
+- Listen for stripe events with webhooks 
 
 ### 4. Monthly Usage & Cost Rollup 
 - `GET /usage` provides the user with:
   - Token breakdown (input, cached, reasoning, output)
-  - Cost breakdown (token costs, subscription plan fee, total USD)
+  - Cost breakdown (tokens costs)
   - Remaining quota balance
 
 ---
 
-## 🗄️ Database Schema
+##  Database Schema
 
 ```mermaid
 erDiagram
@@ -231,6 +223,12 @@ Seed the default subscription tiers (`Free` and `Pro`):
 pnpm db:seed
 ```
 
+---
+
+### 4. Push database schema
+```bash
+pnpm db:push
+```
 ---
 
 ### 4. Run Development Server
