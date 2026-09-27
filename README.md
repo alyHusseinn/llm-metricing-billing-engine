@@ -260,3 +260,10 @@ Copy the printed webhook secret (`whsec_...`) into your `.env` as `STRIPE_WEBHOO
 | `POST` | `/webhook` | Stripe | Handle asynchronous Stripe subscription lifecycle events |
 
 ---
+
+# To do next
+- [-] Full test, and add build CI/CD pipline.
+- [-] Add notificaiton service to alert user with email about limits when 80% or 100%
+- [-] Integrate local LLamma model and as LLM provider.
+- [-] Use Redis as a caching layer to cach responses.
+
