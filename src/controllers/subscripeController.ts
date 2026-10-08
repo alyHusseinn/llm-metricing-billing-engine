@@ -4,10 +4,7 @@ import { AuthRequest } from "../middleware/authenticate";
 import subscriptionRepo from "../reposatory/subscriptionRepo";
 import planRepo from "../reposatory/planRepo";
 import { createStripeCheckoutSession } from "../utils/stripeSession";
-
-
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-
+import getExpirationDate from "../utils/expirationDate";
 
 const subscribeSchema = z.object({
     planName: z.enum(["Pro"]).default("Pro"),
@@ -37,8 +34,7 @@ export const subscripe = async (req: AuthRequest, res: Response): Promise<void> 
         // check if user has active sub?
         const activeSub = await subscriptionRepo.findActiveSubscriptionByUserId(userId);
         if (activeSub) {
-            const cycleStart = new Date(activeSub.startDate).getTime();
-            const expirationDate = new Date(cycleStart + THIRTY_DAYS_MS);
+            const expirationDate = getExpirationDate(activeSub.startDate);
             const isExpired = new Date() > expirationDate;
 
             if (isExpired) {
