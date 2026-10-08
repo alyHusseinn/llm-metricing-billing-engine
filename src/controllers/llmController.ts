@@ -1,41 +1,21 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/authenticate";
-import { planTable, subscriptionTable, usageEventTable } from "../db/schema";
-import { db } from "../db";
-import { eq, and, sum, count } from "drizzle-orm";
 import { addEmailJob } from "../services/email.queue";
+import subscriptionRepo from "../reposatory/subscriptionRepo";
+import planRepo  from "../reposatory/planRepo";
+import usageRepo from "../reposatory/usageRepo";
+import getExpirationDate from "../utils/expirationDate"
+import callLLM from "../utils/callLlm"
 
 export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.userId;
-
-        // Validate Idempotency Header
-        const idempotencyKey = (req.headers["idempotency-key"]) as string | undefined;
-        if (!idempotencyKey || typeof idempotencyKey !== "string" || idempotencyKey.trim() === "") {
-            res.status(400).json({
-                error: "Missing required 'Idempotency-Key' header",
-                code: "MISSING_IDEMPOTENCY_KEY",
-            });
-            return;
-        }
+        const idempotencyKey = (req.headers["idempotency-key"]) as string;
 
         // Find the user's active subscription
-        const [activeSubWithPlan] = await db
-            .select({
-                subscription: subscriptionTable,
-                plan: planTable,
-            })
-            .from(subscriptionTable)
-            .innerJoin(planTable, eq(subscriptionTable.planId, planTable.id))
-            .where(
-                and(
-                    eq(subscriptionTable.userId, userId!),
-                    eq(subscriptionTable.status, "Active")
-                )
-            )
-            .limit(1);
+        const subscription = await subscriptionRepo.findActiveSubscriptionByUserId(userId!);
 
-        if (!activeSubWithPlan) {
+        if (!subscription) {
             res.status(402).json({
                 error: "Active subscription required. Please subscribe to a plan.",
                 code: "NO_ACTIVE_SUBSCRIPTION",
@@ -43,18 +23,11 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
-        const { subscription, plan } = activeSubWithPlan;
-
         // Verify Expiration max 30 days
-        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-        const cycleStart = new Date(subscription.startDate);
-        const expirationDate = new Date(cycleStart.getTime() + THIRTY_DAYS_MS);
+        const expirationDate = getExpirationDate(subscription.startDate)
 
         if (new Date() > expirationDate) {
-            await db
-                .update(subscriptionTable)
-                .set({ status: "Past_due" })
-                .where(eq(subscriptionTable.id, subscription.id));
+            await subscriptionRepo.updateSubscriptionStatus(subscription.id, "Past_due")
 
             res.status(402).json({
                 error: "Subscription period has expired. Please renew your subscription.",
@@ -64,16 +37,7 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
         }
 
         // Check Idempotency Cache
-        const [existingEvent] = await db
-            .select()
-            .from(usageEventTable)
-            .where(
-                and(
-                    eq(usageEventTable.subscriptionId, subscription.id),
-                    eq(usageEventTable.requestId, idempotencyKey)
-                )
-            )
-            .limit(1);
+        const existingEvent = await usageRepo.findUsageEventBySubscriptionIdAndRequestId(subscription.id, idempotencyKey);
 
         if (existingEvent) {
             res.status(200).json({
@@ -89,71 +53,49 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
         }
 
         // Check Quota for the CURRENT cycle
-        const [usageResult] = await db
-            .select({ totalTokensUsed: sum(usageEventTable.totalTokens), totalRequests: count() })
-            .from(usageEventTable)
-            .where(
-                and(
-                    eq(usageEventTable.subscriptionId, subscription.id),
-                )
-            );
+        const usageResult = await usageRepo.getUsageSummaryBySubscriptionId(subscription.id)
+        const plan = await planRepo.findPlanById(subscription.planId)!;
 
-        const tokensUsed = Number(usageResult?.totalTokensUsed ?? 0);
-        const requestsUsed = Number(usageResult?.totalRequests ?? 0)
+        const tokensUsed = Number(usageResult?.totalTokensUsed);
+        const requestsUsed = Number(usageResult?.totalRequests)
         const ESTIMATED_CALL_TOKENS = 5000; // Expected input + output tokens
 
-        if (tokensUsed + ESTIMATED_CALL_TOKENS > plan.tokensLimit) {
+        if (tokensUsed + ESTIMATED_CALL_TOKENS > plan!.tokensLimit) {
             // update the subscription status to Limit_exceeded
-            await db
-                .update(subscriptionTable)
-                .set({ status: "Limit_Exceeded" })
-                .where(eq(subscriptionTable.id, subscription.id));
+            await subscriptionRepo.updateSubscriptionStatus(subscription.id, "Limit_Exceeded")
 
             res.status(429).json({
                 error: "Token quota exceeded for the current billing period",
                 code: "QUOTA_EXCEEDED",
                 currentUsage: tokensUsed,
-                limit: plan.tokensLimit,
+                limit: plan!.tokensLimit,
             });
             return;
-        } else if (requestsUsed >= plan.requestsLimit) {
-            await db
-                .update(subscriptionTable)
-                .set({ status: "Limit_Exceeded" })
-                .where(eq(subscriptionTable.id, subscription.id));
+        } else if (requestsUsed >= plan!.requestsLimit) {
+            await subscriptionRepo.updateSubscriptionStatus(subscription.id, "Limit_Exceeded")
 
             res.status(429).json({
                 error: "Requests quota exceeds for the current billing period",
                 code: "QOUTA_EXCEEDED",
                 currentUsage: requestsUsed,
-                limit: plan.requestsLimit
+                limit: plan!.requestsLimit
             })
             return
         }
 
         // Simulated Call to LLM
-        const inputTokens = 1000, outputTokens = 2500, reasoningTokens = 1000, cachedTokens = 500;
-        const totalTokens = inputTokens + outputTokens + reasoningTokens + cachedTokens;
-        const generatedAnswer = "AI answer";
+        const { inputTokens, outputTokens, reasoningTokens, cachedTokens, totalTokens, generatedAnswer } = await callLLM();
 
         // Record Usage Event 
-        await db.insert(usageEventTable).values({
-            subscriptionId: subscription.id,
-            requestId: idempotencyKey,
-            inputTokens,
-            outputTokens,
-            reasoningTokens,
-            cachedTokens,
-            requestStatus: "Succeeded",
-        });
+        await usageRepo.recordUsageEvent(subscription.id, idempotencyKey, inputTokens, outputTokens, reasoningTokens, cachedTokens, totalTokens);
 
         // Check if the remaining tokens are below the threshold and send email if necessary
         // calculate total used tokens -> compare 
-        const remainingTokens = plan.tokensLimit - (tokensUsed + totalTokens);
+        const remainingTokens = plan!.tokensLimit - (tokensUsed + totalTokens);
 
         if(remainingTokens <= 0) { // User used 100% of their quota
             await addEmailJob(userId!, subscription.id, 100);
-        }else if (remainingTokens <= plan.tokensLimit * 0.2) { // User used 80% of their quota
+        }else if (remainingTokens <= plan!.tokensLimit * 0.2) { // User used 80% of their quota
             await addEmailJob(userId!, subscription.id, 80);
         }
 
@@ -166,7 +108,7 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
                 reasoningTokens,
                 cachedTokens,
                 totalTokens,
-                remainingTokens: plan.tokensLimit - (tokensUsed + totalTokens),
+                remainingTokens: plan!.tokensLimit - (tokensUsed + totalTokens),
             },
         });
     } catch (error) {
