@@ -1,8 +1,11 @@
-import { usageEventTable, subscriptionTable, planTable } from "../db/schema";
+import { subscriptionTable } from "../db/schema";
 import { db } from "../db";
-import { desc, eq, sum, and } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { AuthRequest } from "../middleware/authenticate";
 import { Response } from "express";
+import subscriptionRepo from "../reposatory/subscriptionRepo";
+import usageRepo from "../reposatory/usageRepo";
+import planRepo from "../reposatory/planRepo";
 
 
 /**
@@ -16,45 +19,27 @@ const rollupUsage = async (req: AuthRequest, res: Response) => {
      */
 
     try {
-        let [sub] = await db.select()
-            .from(subscriptionTable)
-            .where(and(
-                eq(subscriptionTable.userId, req.userId!),
-                eq(subscriptionTable.status, "Active")
-            ));
-
-        console.log(req.userId)
+        let sub = await subscriptionRepo.findActiveSubscriptionByUserId(req.userId!);
 
         if (!sub) {
             // find the last sub by the user and Rollup the usage events
-            const [notActiveSub] = await db.select()
-                .from(subscriptionTable)
-                .where(eq(subscriptionTable.userId, req.userId!))
-                .orderBy(desc(subscriptionTable.updatedAt));
-
-            sub = notActiveSub;
+            sub = await subscriptionRepo.findCurrentNotActiveSub(req.userId!);
         }
 
-        const [plan] = await db.select()
-            .from(planTable)
-            .where(eq(planTable.id, sub.planId));
+        const plan = await planRepo.findPlanById(sub.planId);
 
-        const limit = plan.tokensLimit!;
-        let [used] = (await db.select({
-            tokensUsed: sum(usageEventTable.totalTokens),
-            outputTokens: sum(usageEventTable.outputTokens),
-            inputTokens: sum(usageEventTable.inputTokens),
-            reasoningTokens: sum(usageEventTable.reasoningTokens),
-            cachedTokens: sum(usageEventTable.cachedTokens)
-        })
-            .from(usageEventTable)
-            .where(eq(usageEventTable.subscriptionId, sub.id)))
+        console.log(plan)
 
-        const costInCents = (Number(used.tokensUsed) / limit) * plan.priceInCents
+        const limit = plan!.tokensLimit!;
+        let [usage] = await usageRepo.getUsageRollup(sub.id);
+
+        const costInCents = (Number(usage.totalTokens) / limit) * plan!.priceInCents
+
+        console.log(usage.totalTokens, limit, plan!.priceInCents, costInCents)
 
         res.status(200).json({
             limit,
-            used,
+            usage,
             costInCents
         })
         return;

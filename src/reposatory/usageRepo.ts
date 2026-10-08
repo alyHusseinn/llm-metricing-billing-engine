@@ -50,6 +50,17 @@ const usageRepo = {
             console.error("Error recording usage event:", error);
             throw error;
         }
+    },
+    async getUsageRollup(subscriptionId: number) {
+        return (await db.select({
+            totalTokens: sum(usageEventTable.totalTokens),
+            outputTokens: sum(usageEventTable.outputTokens),
+            inputTokens: sum(usageEventTable.inputTokens),
+            reasoningTokens: sum(usageEventTable.reasoningTokens),
+            cachedTokens: sum(usageEventTable.cachedTokens)
+        })
+            .from(usageEventTable)
+            .where(eq(usageEventTable.subscriptionId, subscriptionId)))
     }
 };
 

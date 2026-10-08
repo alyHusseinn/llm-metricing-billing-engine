@@ -1,6 +1,6 @@
 import { subscriptionTable, planTable } from "../db/schema";
 import { db } from "../db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 
 
 const subscriptionRepo = {
@@ -38,6 +38,13 @@ const subscriptionRepo = {
         await db.update(subscriptionTable)
             .set({ status })
             .where(eq(subscriptionTable.id, subscriptionId));
+    },
+    async findCurrentNotActiveSub(userId: number): Promise<{ id: number; userId: number; planId: number; status: string, startDate: Date }> {
+        const [subscription] = await db.select()
+            .from(subscriptionTable)
+            .where(eq(subscriptionTable.userId, userId!))
+            .orderBy(desc(subscriptionTable.updatedAt)).limit(1);
+        return subscription;
     }
 }
 
