@@ -1,14 +1,10 @@
 import { Response } from "express";
-import Stripe from "stripe";
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
 import { AuthRequest } from "../middleware/authenticate";
-import { db } from "../db";
-import { planTable, subscriptionTable } from "../db/schema";
-import { env } from "../utils/env";
+import subscriptionRepo from "../reposatory/subscriptionRepo";
+import planRepo from "../reposatory/planRepo";
+import { createStripeCheckoutSession } from "../utils/stripeSession";
 
-const stripeApiKey = env.STRIPE_SECRET_KEY || "";
-const stripeClient = new Stripe(stripeApiKey);
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -19,11 +15,14 @@ const subscribeSchema = z.object({
 
 /**
  * POST /subscripe 
+ * Body: { planName }
+ * Check if user has active sub? if not create stripe session and return the session URL
  */
 export const subscripe = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const userId = req.userId;
+        const userId = req.userId!;
 
+        // Validate request body
         const parsed = subscribeSchema.safeParse(req.body || {});
         if (!parsed.success) {
             res.status(400).json({
@@ -35,30 +34,16 @@ export const subscripe = async (req: AuthRequest, res: Response): Promise<void> 
 
         const { planName } = parsed.data;
 
-        // user has active sub?
-        const [activeSub] = await db
-            .select().from(subscriptionTable)
-            .where(
-                and(
-                    eq(subscriptionTable.userId, userId!),
-                    eq(subscriptionTable.status, "Active")
-                )
-            )
-            .limit(1);
-
-
+        // check if user has active sub?
+        const activeSub = await subscriptionRepo.findActiveSubscriptionByUserId(userId);
         if (activeSub) {
-
             const cycleStart = new Date(activeSub.startDate).getTime();
             const expirationDate = new Date(cycleStart + THIRTY_DAYS_MS);
             const isExpired = new Date() > expirationDate;
 
             if (isExpired) {
                 // mark it as Past_due so user can renew
-                await db
-                    .update(subscriptionTable)
-                    .set({ status: "Past_due" })
-                    .where(eq(subscriptionTable.id, activeSub.id));
+                await subscriptionRepo.updateSubscriptionStatus(activeSub.id, "Past_due");
             } else {
                 // User already has active plan and not expired
                 res.status(409).json({
@@ -69,39 +54,35 @@ export const subscripe = async (req: AuthRequest, res: Response): Promise<void> 
                 });
                 return;
             }
-
         }
 
-        const [targetPlan] = await db.select().from(planTable).where(eq(planTable.name, planName));
+        // Find the plan by name
+        const targetPlan = await planRepo.findPlanByName(planName);
+        if (!targetPlan) {
+            res.status(404).json({
+                error: `Plan not found: ${planName}`,
+                code: "PLAN_NOT_FOUND",
+            });
+            return;
+        }
 
-        const appBaseUrl = env.APP_URL || `http://localhost:${env.PORT}`;
-        const successUrl = `${appBaseUrl}/subscription/success?session_id={CHECKOUT_SESSION_ID}`;
-        const cancelUrl = `${appBaseUrl}/subscription/cancel`;
+        // Create a Stripe checkout session
+        const session = await createStripeCheckoutSession(String(userId), String(targetPlan.id), targetPlan.name);
 
-        const session = await stripeClient.checkout.sessions.create({
-            mode: "subscription",
-            payment_method_types: ["card"],
-            line_items: [
-                {
-                    price: env.STRIPE_PRICEID,
-                    quantity: 1,
-                },
-            ],
-            // This metadata identify the user on webhooks
-            metadata: {
-                userId: String(userId),
-                planId: String(targetPlan.id),
-                planName: targetPlan.name,
-            },
-            success_url: successUrl,
-            cancel_url: cancelUrl,
-        });
+        if (!session) {
+            res.status(500).json({
+                error: "Failed to create Stripe checkout session",
+                code: "STRIPE_SESSION_CREATION_FAILED",
+            });
+            return;
+        }
 
         res.status(200).json({
             message: "Stripe checkout session created successfully",
             checkoutUrl: session.url,
             sessionId: session.id,
         });
+
     } catch (error) {
         console.error("Subscription Checkout Error:", error);
         res.status(500).json({

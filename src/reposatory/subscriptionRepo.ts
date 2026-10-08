@@ -1,6 +1,6 @@
 import { subscriptionTable, planTable } from "../db/schema";
 import { db } from "../db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 
 const subscriptionRepo = {
@@ -15,7 +15,7 @@ const subscriptionRepo = {
             .values({ userId, planId: plan.id, status: "Active" })
             .returning({ id: subscriptionTable.id, userId: subscriptionTable.userId, planId: subscriptionTable.planId, status: subscriptionTable.status });
         return subscription;
-    }, 
+    },
     async createProsub(userId: number): Promise<{ id: number; userId: number; planId: number; status: string }> {
         // First, find the plan ID based on the plan name
         const [plan] = await db.select({ id: planTable.id }).from(planTable).where(eq(planTable.name, "Pro")).limit(1);
@@ -26,6 +26,18 @@ const subscriptionRepo = {
             .values({ userId, planId: plan.id, status: "Active" })
             .returning({ id: subscriptionTable.id, userId: subscriptionTable.userId, planId: subscriptionTable.planId, status: subscriptionTable.status });
         return subscription;
+    },
+    async findActiveSubscriptionByUserId(userId: number): Promise<{ id: number; userId: number; planId: number; status: string, startDate: Date } | null> {
+        const [subscription] = await db.select({ id: subscriptionTable.id, userId: subscriptionTable.userId, planId: subscriptionTable.planId, status: subscriptionTable.status, startDate: subscriptionTable.startDate })
+            .from(subscriptionTable)
+            .where(and(eq(subscriptionTable.userId, userId), eq(subscriptionTable.status, "Active")))
+            .limit(1);
+        return subscription || null;
+    },
+    async updateSubscriptionStatus(subscriptionId: number, status: "Past_due" | "Limit_Exceeded" | "Canceled"): Promise<void> {
+        await db.update(subscriptionTable)
+            .set({ status })
+            .where(eq(subscriptionTable.id, subscriptionId));
     }
 }
 
