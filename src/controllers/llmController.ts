@@ -3,14 +3,11 @@ import { AuthRequest } from "../middleware/authenticate";
 import { planTable, subscriptionTable, usageEventTable } from "../db/schema";
 import { db } from "../db";
 import { eq, and, sum, count } from "drizzle-orm";
+import { addEmailJob } from "../services/email.queue";
 
 export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.userId;
-        if (!userId) {
-            res.status(401).json({ error: "Unauthorized", code: "UNAUTHORIZED" });
-            return;
-        }
 
         // Validate Idempotency Header
         const idempotencyKey = (req.headers["idempotency-key"]) as string | undefined;
@@ -32,7 +29,7 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
             .innerJoin(planTable, eq(subscriptionTable.planId, planTable.id))
             .where(
                 and(
-                    eq(subscriptionTable.userId, userId),
+                    eq(subscriptionTable.userId, userId!),
                     eq(subscriptionTable.status, "Active")
                 )
             )
@@ -149,6 +146,16 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
             cachedTokens,
             requestStatus: "Succeeded",
         });
+
+        // Check if the remaining tokens are below the threshold and send email if necessary
+        // calculate total used tokens -> compare 
+        const remainingTokens = plan.tokensLimit - (tokensUsed + totalTokens);
+
+        if(remainingTokens <= 0) { // User used 100% of their quota
+            await addEmailJob(userId!, subscription.id, 100);
+        }else if (remainingTokens <= plan.tokensLimit * 0.2) { // User used 80% of their quota
+            await addEmailJob(userId!, subscription.id, 80);
+        }
 
         res.status(200).json({
             answer: generatedAnswer,

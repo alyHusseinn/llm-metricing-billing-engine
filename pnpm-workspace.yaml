@@ -2,3 +2,9 @@ ignoredBuiltDependencies:
   - bcrypt
   - esbuild
   - node-base64
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - '@swc/core'
+  - msgpackr-extract
+  - unrs-resolver
