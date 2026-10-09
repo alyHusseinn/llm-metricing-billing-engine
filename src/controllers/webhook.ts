@@ -1,16 +1,16 @@
 import { Request, Response } from "express";
 import Stripe from "stripe";
-import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { subscriptionTable, stripeEventTable } from "../db/schema";
+import { stripeEventTable } from "../db/schema";
 import { env } from "../utils/env";
+import subscriptionRepo from "../reposatory/subscriptionRepo";
 
 const stripeApiKey = env.STRIPE_SECRET_KEY!;
 const stripeWebhookSecret = env.STRIPE_WEBHOOK_SECRET!;
 
 const stripeClient = new Stripe(stripeApiKey);
 
-export const handleWebhook = async (req: Request, res: Response): Promise<void> => {
+export const stripeWebhookHandler = async (req: Request, res: Response): Promise<void> => {
     const sig = req.headers["stripe-signature"];
 
     if (!sig || typeof sig !== "string") {
@@ -25,13 +25,13 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
 
         // check stripe_evnet in DB? don't process it : insert
         const [insertedEvent] = await db.insert(stripeEventTable)
-        .values({type: event.type, stripeEventId: event.id})
-        .onConflictDoNothing({
-            target: stripeEventTable.stripeEventId
-        }).returning();
+            .values({ type: event.type, stripeEventId: event.id })
+            .onConflictDoNothing({
+                target: stripeEventTable.stripeEventId
+            }).returning();
 
         // The event processed before
-        if(!insertedEvent) {
+        if (!insertedEvent) {
             console.log("This Event has been processed before")
             res.status(200).json({ received: true });
             return;
@@ -59,13 +59,7 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
                         console.log(`Activating subscription for user ${userId}, plan ${planId}`);
 
                         // Insert the new active subscription
-                        await db.insert(subscriptionTable).values({
-                            userId: Number(userId),
-                            planId: Number(planId),
-                            stripeSubscriptionId: stripeSubscriptionId || null,
-                            status: "Active",
-                            startDate: new Date(),
-                        });
+                        await subscriptionRepo.createProsub(Number(userId), stripeSubscriptionId);
 
                         console.log(`Subscription activated for user ${userId}`);
                     } else {
@@ -92,13 +86,7 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
                     newStatus = "Canceled";
                 }
 
-                await db
-                    .update(subscriptionTable)
-                    .set({
-                        status: newStatus,
-                        ...(newStatus === "Active" ? { startDate: new Date() } : {}),
-                    })
-                    .where(eq(subscriptionTable.stripeSubscriptionId, stripeSubId));
+                await subscriptionRepo.updateSubscriptionStatusByStripeId(stripeSubId, newStatus);
                 break;
             }
 
@@ -111,13 +99,9 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
 
                 console.log(`Subscription ${stripeSubId} deleted in Stripe`);
 
-                await db
-                    .update(subscriptionTable)
-                    .set({ status: "Canceled" })
-                    .where(eq(subscriptionTable.stripeSubscriptionId, stripeSubId));
+                await subscriptionRepo.cancelSubscriptionByStripeId(stripeSubId);
                 break;
             }
-
             default:
                 break;
         }
@@ -130,5 +114,5 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
 };
 
 export default {
-    handleWebhook,
+    stripeWebhookHandler,
 };

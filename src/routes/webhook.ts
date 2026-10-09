@@ -7,7 +7,7 @@ const router = Router();
 router.post(
   "/",
   express.raw({ type: "application/json" }),
-  webhookController.handleWebhook
+  webhookController.stripeWebhookHandler
 );
 
 export default router;

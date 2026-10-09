@@ -1,16 +1,12 @@
 import { Worker, Job } from 'bullmq';
 import { redisConnection } from '../config/redis';
-import { db } from '../db';
 import alertsRepo from '../reposatory/alertsRepo';
 import userRepo from '../reposatory/userRepo';
 import { sendEmailNotification } from '../services/emailService';
-
-
 /**
  * First parse the job data -> get the userId, subscriptionId, threshold
  * Then with drizzle find the user email -> call the send email function with the email and threshold
  */
-
 const notificationWorker = new Worker('email-queue', async (job: Job) => {
     if (job.name === 'email-alert') {
         const { userId, subscriptionId, threshold } = job.data;
@@ -35,6 +31,7 @@ const notificationWorker = new Worker('email-queue', async (job: Job) => {
     }
 }, {
     connection: redisConnection,
+    concurrency: 5,
 });
 
 notificationWorker.on('completed', (job) => {

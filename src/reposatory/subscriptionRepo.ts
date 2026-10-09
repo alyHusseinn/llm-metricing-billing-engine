@@ -16,14 +16,14 @@ const subscriptionRepo = {
             .returning({ id: subscriptionTable.id, userId: subscriptionTable.userId, planId: subscriptionTable.planId, status: subscriptionTable.status });
         return subscription;
     },
-    async createProsub(userId: number): Promise<{ id: number; userId: number; planId: number; status: string }> {
+    async createProsub(userId: number, stripeSubscriptionId: string | null): Promise<{ id: number; userId: number; planId: number; status: string }> {
         // First, find the plan ID based on the plan name
         const [plan] = await db.select({ id: planTable.id }).from(planTable).where(eq(planTable.name, "Pro")).limit(1);
         if (!plan) {
             throw new Error(`Plan not found: Pro`);
         }
         const [subscription] = await db.insert(subscriptionTable)
-            .values({ userId, planId: plan.id, status: "Active" })
+            .values({ userId, planId: plan.id, status: "Active", stripeSubscriptionId })
             .returning({ id: subscriptionTable.id, userId: subscriptionTable.userId, planId: subscriptionTable.planId, status: subscriptionTable.status });
         return subscription;
     },
@@ -38,6 +38,20 @@ const subscriptionRepo = {
         await db.update(subscriptionTable)
             .set({ status })
             .where(eq(subscriptionTable.id, subscriptionId));
+    },
+    async updateSubscriptionStatusByStripeId(stripeSubscriptionId: string, status: "Active" | "Past_due" | "Canceled"): Promise<void> {
+        let startTime = null;
+        if (status === "Active") {
+            startTime = new Date();
+        }
+        await db.update(subscriptionTable)
+            .set({ status, ...(startTime ? { startDate: startTime } : {}) })
+            .where(eq(subscriptionTable.stripeSubscriptionId, stripeSubscriptionId));
+    },
+    async cancelSubscriptionByStripeId(stripeSubscriptionId: string): Promise<void> {
+        await db.update(subscriptionTable)
+            .set({ status: "Canceled" })
+            .where(eq(subscriptionTable.stripeSubscriptionId, stripeSubscriptionId));
     },
     async findCurrentNotActiveSub(userId: number): Promise<{ id: number; userId: number; planId: number; status: string, startDate: Date }> {
         const [subscription] = await db.select()
