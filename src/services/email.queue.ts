@@ -9,7 +9,7 @@ export const emailQueue = new Queue('email-queue', {
  * Adds an email job to the queue
  */
 
-export async function addEmailJob(userId: number, subscriptionId: number, threshold: number): Promise<void> {
+export async function addEmailJob(userId: number, subscriptionId: number, threshold: 80 | 100): Promise<void> {
   await emailQueue.add(
     'email-alert', 
     { userId, subscriptionId, threshold },

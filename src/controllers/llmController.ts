@@ -1,11 +1,11 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/authenticate";
-import { addEmailJob } from "../services/email.queue";
 import subscriptionRepo from "../reposatory/subscriptionRepo";
-import planRepo  from "../reposatory/planRepo";
+import planRepo from "../reposatory/planRepo";
 import usageRepo from "../reposatory/usageRepo";
 import getExpirationDate from "../utils/expirationDate"
 import callLLM from "../utils/callLlm"
+import pushNotificationToQueue from "../utils/pushNotificaitonToQueue";
 
 export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -93,12 +93,6 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
         // calculate total used tokens -> compare 
         const remainingTokens = plan!.tokensLimit - (tokensUsed + totalTokens);
 
-        if(remainingTokens <= 0) { // User used 100% of their quota
-            await addEmailJob(userId!, subscription.id, 100);
-        }else if (remainingTokens <= plan!.tokensLimit * 0.2) { // User used 80% of their quota
-            await addEmailJob(userId!, subscription.id, 80);
-        }
-
         res.status(200).json({
             answer: generatedAnswer,
             cached: false,
@@ -111,6 +105,11 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
                 remainingTokens: plan!.tokensLimit - (tokensUsed + totalTokens),
             },
         });
+
+        // Push Notification to Queue
+        await pushNotificationToQueue(remainingTokens, plan!.tokensLimit, { userId: userId!, subscriptionId: subscription.id });
+        
+        return
     } catch (error) {
         console.error("LLM Generate Error:", error);
         res.status(500).json({
@@ -121,5 +120,5 @@ export const llmGenerate = async (req: AuthRequest, res: Response): Promise<void
 };
 
 export default {
-    llmGenerate,                           
+    llmGenerate,
 };

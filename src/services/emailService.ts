@@ -21,5 +21,5 @@ export const sendEmailNotification = async (to: string, threshold: number) => {
         <p>Thank you for using our service!</p>
   `,
   };
-    await transporter.sendMail(mailOptions);
+    return await transporter.sendMail(mailOptions);
 };
